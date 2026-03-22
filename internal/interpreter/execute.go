@@ -12,13 +12,37 @@ func (i *Interpreter) runProgram() error {
 	i.runtime.Reset()
 
 	lines := i.program.SortedLines()
-	for _, line := range lines {
+	if len(lines) == 0 {
+		return nil
+	}
+
+	lineIndexByNumber := make(map[int]int, len(lines))
+	for idx, line := range lines {
+		lineIndexByNumber[line.Number] = idx
+	}
+
+	pc := 0
+	for pc < len(lines) {
+		line := lines[pc]
+
 		if err := i.executeLine(line); err != nil {
 			return fmt.Errorf("line %d: %w", line.Number, err)
 		}
+
 		if i.runtime.IsStopped() {
 			return nil
 		}
+
+		if target, ok := i.runtime.ConsumeJump(); ok {
+			nextPC, exists := lineIndexByNumber[target]
+			if !exists {
+				return fmt.Errorf("line %d: target line not found: %d", line.Number, target)
+			}
+			pc = nextPC
+			continue
+		}
+
+		pc++
 	}
 
 	return nil
@@ -39,6 +63,14 @@ func (i *Interpreter) executeLine(line program.Line) error {
 
 	if strings.HasPrefix(upper, "PRINT") {
 		return i.executePrint(text)
+	}
+
+	if handled, err := i.tryIfThen(text); handled {
+		return err
+	}
+
+	if handled, err := i.tryGoto(text); handled {
+		return err
 	}
 
 	if handled, err := i.tryAssignment(text); handled {
