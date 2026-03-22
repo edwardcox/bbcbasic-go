@@ -5,13 +5,20 @@ import (
 )
 
 func (i *Interpreter) tryAssignment(text string) (bool, error) {
-	eq := strings.Index(text, "=")
+	trimmed := strings.TrimSpace(text)
+	upper := strings.ToUpper(trimmed)
+
+	if strings.HasPrefix(upper, "LET ") {
+		trimmed = strings.TrimSpace(trimmed[4:])
+	}
+
+	eq := strings.Index(trimmed, "=")
 	if eq <= 0 {
 		return false, nil
 	}
 
-	left := strings.TrimSpace(text[:eq])
-	right := strings.TrimSpace(text[eq+1:])
+	left := strings.TrimSpace(trimmed[:eq])
+	right := strings.TrimSpace(trimmed[eq+1:])
 
 	if !isVariableName(left) {
 		return false, nil

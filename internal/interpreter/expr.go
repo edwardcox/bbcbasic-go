@@ -7,103 +7,211 @@ import (
 	"unicode"
 )
 
+type exprParser struct {
+	interp *Interpreter
+	input  string
+	pos    int
+}
+
 func (i *Interpreter) evalIntExpression(expr string) (int, error) {
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
-		return 0, fmt.Errorf("empty expression")
+	parser := &exprParser{
+		interp: i,
+		input:  expr,
+		pos:    0,
 	}
 
-	tokens := tokenizeSimpleExpr(expr)
-	if len(tokens) == 0 {
-		return 0, fmt.Errorf("empty expression")
-	}
-
-	value, err := i.evalSimpleToken(tokens[0])
+	value, err := parser.parseExpression()
 	if err != nil {
 		return 0, err
 	}
 
-	pos := 1
-	for pos < len(tokens) {
-		if pos+1 >= len(tokens) {
-			return 0, fmt.Errorf("incomplete expression")
-		}
-
-		op := tokens[pos]
-		right, err := i.evalSimpleToken(tokens[pos+1])
-		if err != nil {
-			return 0, err
-		}
-
-		switch op {
-		case "+":
-			value += right
-		case "-":
-			value -= right
-		case "*":
-			value *= right
-		case "/":
-			if right == 0 {
-				return 0, fmt.Errorf("division by zero")
-			}
-			value /= right
-		default:
-			return 0, fmt.Errorf("unsupported operator: %s", op)
-		}
-
-		pos += 2
+	parser.skipSpaces()
+	if !parser.isAtEnd() {
+		return 0, fmt.Errorf("unexpected input near: %s", parser.remaining())
 	}
 
 	return value, nil
 }
 
-func (i *Interpreter) evalSimpleToken(token string) (int, error) {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return 0, fmt.Errorf("empty token")
+func (p *exprParser) parseExpression() (int, error) {
+	value, err := p.parseTerm()
+	if err != nil {
+		return 0, err
 	}
 
-	if n, err := strconv.Atoi(token); err == nil {
-		return n, nil
-	}
+	for {
+		p.skipSpaces()
 
-	if isVariableName(token) {
-		if value, ok := i.runtime.GetVar(strings.ToUpper(token)); ok {
-			return value, nil
+		if p.match('+') {
+			right, err := p.parseTerm()
+			if err != nil {
+				return 0, err
+			}
+			value += right
+			continue
 		}
-		return 0, fmt.Errorf("unknown variable: %s", token)
+
+		if p.match('-') {
+			right, err := p.parseTerm()
+			if err != nil {
+				return 0, err
+			}
+			value -= right
+			continue
+		}
+
+		break
 	}
 
-	return 0, fmt.Errorf("invalid token: %s", token)
+	return value, nil
 }
 
-func tokenizeSimpleExpr(expr string) []string {
-	var tokens []string
-	var current strings.Builder
-
-	flush := func() {
-		if current.Len() > 0 {
-			tokens = append(tokens, current.String())
-			current.Reset()
-		}
+func (p *exprParser) parseTerm() (int, error) {
+	value, err := p.parseFactor()
+	if err != nil {
+		return 0, err
 	}
 
-	for _, r := range expr {
-		switch {
-		case unicode.IsSpace(r):
-			flush()
+	for {
+		p.skipSpaces()
 
-		case r == '+' || r == '-' || r == '*' || r == '/':
-			flush()
-			tokens = append(tokens, string(r))
-
-		default:
-			current.WriteRune(r)
+		if p.match('*') {
+			right, err := p.parseFactor()
+			if err != nil {
+				return 0, err
+			}
+			value *= right
+			continue
 		}
+
+		if p.match('/') {
+			right, err := p.parseFactor()
+			if err != nil {
+				return 0, err
+			}
+			if right == 0 {
+				return 0, fmt.Errorf("division by zero")
+			}
+			value /= right
+			continue
+		}
+
+		break
 	}
 
-	flush()
-	return tokens
+	return value, nil
+}
+
+func (p *exprParser) parseFactor() (int, error) {
+	p.skipSpaces()
+
+	if p.match('-') {
+		value, err := p.parseFactor()
+		if err != nil {
+			return 0, err
+		}
+		return -value, nil
+	}
+
+	if p.match('(') {
+		value, err := p.parseExpression()
+		if err != nil {
+			return 0, err
+		}
+
+		p.skipSpaces()
+		if !p.match(')') {
+			return 0, fmt.Errorf("missing closing parenthesis")
+		}
+		return value, nil
+	}
+
+	if p.isAtEnd() {
+		return 0, fmt.Errorf("unexpected end of expression")
+	}
+
+	ch := p.peek()
+
+	if unicode.IsDigit(ch) {
+		return p.parseNumber()
+	}
+
+	if unicode.IsLetter(ch) {
+		return p.parseVariable()
+	}
+
+	return 0, fmt.Errorf("unexpected character: %c", ch)
+}
+
+func (p *exprParser) parseNumber() (int, error) {
+	start := p.pos
+
+	for !p.isAtEnd() && unicode.IsDigit(p.peek()) {
+		p.pos++
+	}
+
+	text := p.input[start:p.pos]
+	value, err := strconv.Atoi(text)
+	if err != nil {
+		return 0, fmt.Errorf("invalid number: %s", text)
+	}
+
+	return value, nil
+}
+
+func (p *exprParser) parseVariable() (int, error) {
+	start := p.pos
+
+	for !p.isAtEnd() {
+		ch := p.peek()
+		if unicode.IsLetter(ch) || unicode.IsDigit(ch) || ch == '%' || ch == '$' {
+			p.pos++
+			continue
+		}
+		break
+	}
+
+	name := strings.ToUpper(strings.TrimSpace(p.input[start:p.pos]))
+	if name == "" {
+		return 0, fmt.Errorf("invalid variable")
+	}
+
+	value, ok := p.interp.runtime.GetVar(name)
+	if !ok {
+		return 0, fmt.Errorf("unknown variable: %s", name)
+	}
+
+	return value, nil
+}
+
+func (p *exprParser) skipSpaces() {
+	for !p.isAtEnd() && unicode.IsSpace(p.peek()) {
+		p.pos++
+	}
+}
+
+func (p *exprParser) match(ch rune) bool {
+	p.skipSpaces()
+	if p.isAtEnd() || p.peek() != ch {
+		return false
+	}
+	p.pos++
+	return true
+}
+
+func (p *exprParser) peek() rune {
+	return rune(p.input[p.pos])
+}
+
+func (p *exprParser) isAtEnd() bool {
+	return p.pos >= len(p.input)
+}
+
+func (p *exprParser) remaining() string {
+	if p.isAtEnd() {
+		return ""
+	}
+	return strings.TrimSpace(p.input[p.pos:])
 }
 
 func isVariableName(s string) bool {
