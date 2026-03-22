@@ -1,0 +1,18 @@
+# Binaries
+bbcbasic
+*.exe
+*.out
+
+# Go build
+bin/
+build/
+
+# OS files
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Logs
+*.log

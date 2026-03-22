@@ -1,0 +1,19 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"bbcbasic-go/internal/host/terminal"
+	"bbcbasic-go/internal/interpreter"
+)
+
+func main() {
+	h := terminal.New()
+	interp := interpreter.New(h)
+
+	if err := interp.Run(); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
+	}
+}
