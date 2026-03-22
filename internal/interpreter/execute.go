@@ -36,7 +36,7 @@ func (i *Interpreter) runProgram() error {
 		if target, ok := i.runtime.ConsumeJump(); ok {
 			nextPC, exists := lineIndexByNumber[target]
 			if !exists {
-				return fmt.Errorf("line %d: target line not found: %d", line.Number, target)
+				return fmt.Errorf("target line not found: %d", target)
 			}
 			pc = nextPC
 			continue
@@ -56,8 +56,12 @@ func (i *Interpreter) executeLine(line program.Line) error {
 
 	upper := strings.ToUpper(text)
 
-	if upper == "END" {
+	if upper == "END" || upper == "STOP" {
 		i.runtime.Stop()
+		return nil
+	}
+
+	if strings.HasPrefix(upper, "REM") {
 		return nil
 	}
 
@@ -70,6 +74,10 @@ func (i *Interpreter) executeLine(line program.Line) error {
 	}
 
 	if handled, err := i.tryGoto(text); handled {
+		return err
+	}
+
+	if handled, err := i.tryInput(text); handled {
 		return err
 	}
 
@@ -86,15 +94,48 @@ func (i *Interpreter) executePrint(text string) error {
 		return i.host.WriteString("\n")
 	}
 
-	if strings.HasPrefix(rest, "\"") && strings.HasSuffix(rest, "\"") && len(rest) >= 2 {
-		value := rest[1 : len(rest)-1]
-		return i.host.WriteString(value + "\n")
-	}
-
-	value, err := i.evalIntExpression(rest)
+	items, separators, err := splitPrintItems(rest)
 	if err != nil {
 		return err
 	}
 
-	return i.host.WriteString(strconv.Itoa(value) + "\n")
+	var b strings.Builder
+
+	for idx, item := range items {
+		value, err := i.evalPrintItem(item)
+		if err != nil {
+			return err
+		}
+		b.WriteString(value)
+
+		if idx < len(separators) {
+			switch separators[idx] {
+			case ';':
+				// no extra spacing
+			case ',':
+				b.WriteString(" ")
+			}
+		}
+	}
+
+	b.WriteString("\n")
+	return i.host.WriteString(b.String())
+}
+
+func (i *Interpreter) evalPrintItem(item string) (string, error) {
+	item = strings.TrimSpace(item)
+	if item == "" {
+		return "", nil
+	}
+
+	if strings.HasPrefix(item, "\"") && strings.HasSuffix(item, "\"") && len(item) >= 2 {
+		return item[1 : len(item)-1], nil
+	}
+
+	value, err := i.evalIntExpression(item)
+	if err != nil {
+		return "", err
+	}
+
+	return strconv.Itoa(value), nil
 }

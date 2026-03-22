@@ -17,6 +17,7 @@ type Host interface {
 
 	ReadChar() (byte, error)
 	ReadLine(prompt string) (string, error)
+	ReadLineNoPrompt() (string, error)
 
 	ClearScreen() error
 }

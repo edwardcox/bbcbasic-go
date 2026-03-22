@@ -51,7 +51,10 @@ func (t *TerminalHost) ReadLine(prompt string) (string, error) {
 	if err := t.WriteString(prompt); err != nil {
 		return "", err
 	}
+	return t.ReadLineNoPrompt()
+}
 
+func (t *TerminalHost) ReadLineNoPrompt() (string, error) {
 	line, err := t.reader.ReadString('\n')
 	if err != nil {
 		return "", err
