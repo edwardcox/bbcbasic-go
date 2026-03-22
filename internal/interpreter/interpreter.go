@@ -4,15 +4,18 @@ import (
 	"strings"
 
 	"bbcbasic-go/internal/host"
+	"bbcbasic-go/internal/program"
 )
 
 type Interpreter struct {
-	host host.Host
+	host    host.Host
+	program *program.Program
 }
 
 func New(h host.Host) *Interpreter {
 	return &Interpreter{
-		host: h,
+		host:    h,
+		program: program.New(),
 	}
 }
 
@@ -24,7 +27,7 @@ func (i *Interpreter) Run() error {
 	if err := i.host.WriteString("BBC BASIC for macOS (Go prototype)\n"); err != nil {
 		return err
 	}
-	if err := i.host.WriteString("Type QUIT to exit\n"); err != nil {
+	if err := i.host.WriteString("Type QUIT to exit. Use LIST, NEW, RUN, or numbered lines.\n"); err != nil {
 		return err
 	}
 
@@ -37,10 +40,24 @@ func (i *Interpreter) Run() error {
 		trimmed := strings.TrimSpace(line)
 		upper := strings.ToUpper(trimmed)
 
-		switch upper {
-		case "":
+		if trimmed == "" {
 			continue
+		}
 
+		lineNumber, lineText, isNumberedLine, err := program.ParseNumberedLine(trimmed)
+		if err != nil {
+			if err := i.host.WriteString("Error: " + err.Error() + "\n"); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if isNumberedLine {
+			i.program.SetLine(lineNumber, lineText)
+			continue
+		}
+
+		switch upper {
 		case "QUIT", "EXIT":
 			if err := i.host.WriteString("Bye.\n"); err != nil {
 				return err
@@ -49,6 +66,32 @@ func (i *Interpreter) Run() error {
 
 		case "CLS", "CLEAR":
 			if err := i.host.ClearScreen(); err != nil {
+				return err
+			}
+			continue
+
+		case "LIST":
+			listing := i.program.List()
+			if listing == "" {
+				continue
+			}
+			if err := i.host.WriteString(listing); err != nil {
+				return err
+			}
+			continue
+
+		case "NEW":
+			i.program.Clear()
+			continue
+
+		case "RUN":
+			if !i.program.HasLines() {
+				if err := i.host.WriteString("No program\n"); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := i.host.WriteString("RUN not implemented yet\n"); err != nil {
 				return err
 			}
 			continue
