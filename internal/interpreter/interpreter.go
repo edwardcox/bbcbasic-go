@@ -5,17 +5,20 @@ import (
 
 	"bbcbasic-go/internal/host"
 	"bbcbasic-go/internal/program"
+	"bbcbasic-go/internal/runtime"
 )
 
 type Interpreter struct {
 	host    host.Host
 	program *program.Program
+	runtime *runtime.Runtime
 }
 
 func New(h host.Host) *Interpreter {
 	return &Interpreter{
 		host:    h,
 		program: program.New(),
+		runtime: runtime.New(),
 	}
 }
 
@@ -91,8 +94,10 @@ func (i *Interpreter) Run() error {
 				}
 				continue
 			}
-			if err := i.host.WriteString("RUN not implemented yet\n"); err != nil {
-				return err
+			if err := i.runProgram(); err != nil {
+				if err := i.host.WriteString("Error: " + err.Error() + "\n"); err != nil {
+					return err
+				}
 			}
 			continue
 
