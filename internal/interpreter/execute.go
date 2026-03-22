@@ -24,13 +24,22 @@ func (i *Interpreter) runProgram() error {
 	pc := 0
 	for pc < len(lines) {
 		line := lines[pc]
+		nextPC := pc + 1
 
-		if err := i.executeLine(line); err != nil {
+		if err := i.executeLine(line, nextPC); err != nil {
 			return fmt.Errorf("line %d: %w", line.Number, err)
 		}
 
 		if i.runtime.IsStopped() {
 			return nil
+		}
+
+		if returnPC, ok := i.runtime.ConsumeReturnPC(); ok {
+			if returnPC < 0 || returnPC > len(lines) {
+				return fmt.Errorf("invalid RETURN target")
+			}
+			pc = returnPC
+			continue
 		}
 
 		if target, ok := i.runtime.ConsumeJump(); ok {
@@ -48,7 +57,7 @@ func (i *Interpreter) runProgram() error {
 	return nil
 }
 
-func (i *Interpreter) executeLine(line program.Line) error {
+func (i *Interpreter) executeLine(line program.Line, nextPC int) error {
 	text := strings.TrimSpace(line.Text)
 	if text == "" {
 		return nil
@@ -74,6 +83,14 @@ func (i *Interpreter) executeLine(line program.Line) error {
 	}
 
 	if handled, err := i.tryGoto(text); handled {
+		return err
+	}
+
+	if handled, err := i.tryGosub(text, nextPC); handled {
+		return err
+	}
+
+	if handled, err := i.tryReturn(text); handled {
 		return err
 	}
 
