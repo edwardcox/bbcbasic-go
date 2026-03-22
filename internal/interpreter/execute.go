@@ -41,6 +41,10 @@ func (i *Interpreter) executeLine(line program.Line) error {
 		return i.executePrint(text)
 	}
 
+	if handled, err := i.tryAssignment(text); handled {
+		return err
+	}
+
 	return fmt.Errorf("unsupported statement: %s", text)
 }
 
@@ -50,16 +54,15 @@ func (i *Interpreter) executePrint(text string) error {
 		return i.host.WriteString("\n")
 	}
 
-	// Quoted string: PRINT "HELLO"
 	if strings.HasPrefix(rest, "\"") && strings.HasSuffix(rest, "\"") && len(rest) >= 2 {
 		value := rest[1 : len(rest)-1]
 		return i.host.WriteString(value + "\n")
 	}
 
-	// Integer number: PRINT 123
-	if n, err := strconv.Atoi(rest); err == nil {
-		return i.host.WriteString(strconv.Itoa(n) + "\n")
+	value, err := i.evalIntExpression(rest)
+	if err != nil {
+		return err
 	}
 
-	return fmt.Errorf("PRINT currently supports quoted strings or integers only")
+	return i.host.WriteString(strconv.Itoa(value) + "\n")
 }
