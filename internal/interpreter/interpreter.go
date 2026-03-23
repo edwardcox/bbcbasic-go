@@ -61,7 +61,7 @@ func (i *Interpreter) Run() error {
 		}
 
 		switch upper {
-		case "QUIT", "EXIT":
+		case "QUIT", "EXIT", "BYE":
 			if err := i.host.WriteString("Bye.\n"); err != nil {
 				return err
 			}
