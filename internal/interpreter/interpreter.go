@@ -30,7 +30,7 @@ func (i *Interpreter) Run() error {
 	if err := i.host.WriteString("BBC BASIC for macOS (Go prototype)\n"); err != nil {
 		return err
 	}
-	if err := i.host.WriteString("Type QUIT to exit. Use LIST, NEW, RUN, or numbered lines.\n"); err != nil {
+	if err := i.host.WriteString("Type QUIT to exit. Use LIST, NEW, RUN, LOAD, SAVE, or numbered lines.\n"); err != nil {
 		return err
 	}
 
@@ -100,11 +100,28 @@ func (i *Interpreter) Run() error {
 				}
 			}
 			continue
+		}
 
-		default:
-			if err := i.host.WriteString("You typed: " + line + "\n"); err != nil {
-				return err
+		if handled, err := i.trySave(trimmed); handled {
+			if err != nil {
+				if err := i.host.WriteString("Error: " + err.Error() + "\n"); err != nil {
+					return err
+				}
 			}
+			continue
+		}
+
+		if handled, err := i.tryLoad(trimmed); handled {
+			if err != nil {
+				if err := i.host.WriteString("Error: " + err.Error() + "\n"); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+
+		if err := i.host.WriteString("You typed: " + line + "\n"); err != nil {
+			return err
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package program
 
 import (
+	"bufio"
 	"fmt"
 	"sort"
 	"strconv"
@@ -73,6 +74,39 @@ func (p *Program) List() string {
 	}
 
 	return b.String()
+}
+
+func (p *Program) FromText(text string) error {
+	p.Clear()
+
+	scanner := bufio.NewScanner(strings.NewReader(text))
+	lineNo := 0
+
+	for scanner.Scan() {
+		lineNo++
+		raw := strings.TrimRight(scanner.Text(), "\r\n")
+		raw = strings.TrimSpace(raw)
+
+		if raw == "" {
+			continue
+		}
+
+		number, lineText, ok, err := ParseNumberedLine(raw)
+		if err != nil {
+			return fmt.Errorf("file line %d: %w", lineNo, err)
+		}
+		if !ok {
+			return fmt.Errorf("file line %d: missing BASIC line number", lineNo)
+		}
+
+		p.SetLine(number, lineText)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func ParseNumberedLine(input string) (lineNumber int, lineText string, ok bool, err error) {
